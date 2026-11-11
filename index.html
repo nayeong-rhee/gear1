@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>Diary</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --ink: #FF0000;
+    --text: #000000;
+    --stroke: 1.333px;          /* 1pt */
+    --font: "Noto Sans KR", "Noto Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+    --u: 1vw;
+    --lx: 70%;
+    --ly: 108%;
+    --a1: -152deg;
+    --a2: -28deg;
+  }
+
+  /* Tablet / small laptop */
+  @media (max-width: 1024px) {
+    :root { --u: 1.05vw; --lx: 68%; --ly: 104%; --a1: -150deg; --a2: -32deg; }
+  }
+
+  /* Portrait screens (phones, tablets held upright) */
+  @media (orientation: portrait) {
+    :root { --u: 1.2vw; --lx: 62%; --ly: calc(var(--u) * 90); --a1: -125deg; --a2: -10deg; }
+  }
+
+  /* Narrow phones: push the large gear further so it stays dominant */
+  @media (orientation: portrait) and (max-width: 600px) {
+    :root { --u: 1.45vw; --lx: 72%; --ly: calc(var(--u) * 92); --a1: -125deg; --a2: -10deg; }
+  }
+
+  /* ------------------------------------------------------------------ */
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    background: var(--bg);
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
+  /* ---------- Gear stage ---------- */
+
+  /* Fixed background stage. 100lvh keeps it the same size while mobile
+     browser toolbars show/hide, so the gears never shift. */
+  .stage {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100lvh;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .gear {
+    position: absolute;
+    width:  calc(var(--size) * var(--u));
+    height: calc(var(--size) * var(--u));
+    transform: translate(-50%, -50%);   /* static: centre the box on its point */
+    overflow: visible;
+    display: block;
+  }
+
+  .gear--large  { left: var(--lx); top: var(--ly); }
+  .gear--medium {
+    left: calc(var(--lx) + var(--m-dx) * var(--u));
+    top:  calc(var(--ly) + var(--m-dy) * var(--u));
+  }
+  .gear--small {
+    left: calc(var(--lx) + (var(--m-dx) + var(--s-dx)) * var(--u));
+    top:  calc(var(--ly) + (var(--m-dy) + var(--s-dy)) * var(--u));
+  }
+
+  /* The rotating group. Its origin is the SVG's (0,0) = the gear centre. */
+  .rotor {
+    transform-box: view-box;
+    transform-origin: 0 0;
+  }
+
+  .gear path,
+  .gear circle {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: var(--stroke);
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;   /* constant 1pt line at any size */
+    shape-rendering: geometricPrecision;
+  }
+
+  /* ---------- Diary (foreground) ---------- */
+
+  main {
+    position: relative;
+    z-index: 1;
+    min-height: 300vh;                  /* keeps enough scroll to turn the gears */
+    padding: 14vh max(20px, env(safe-area-inset-right)) 40vh max(20px, env(safe-area-inset-left));
+  }
+
+  .diary {
+    max-width: 34em;
+    margin-left: 8vw;
+  }
+
+  @media (max-width: 640px) {
+    .diary { margin-left: 0; }
+  }
+
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 0 14vh;
+    color: var(--ink);
+  }
+
+  .masthead h1 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+  }
+
+  .masthead .count {
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Shared text styles: writing area and saved entries look the same */
+  .date,
+  .entry time {
+    display: block;
+    margin: 0 0 16px;
+    font-family: var(--font);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+  }
+
+  .body,
+  .entry p {
+    font-family: var(--font);
+    font-size: 16px;                    /* ≥16px also prevents iOS zoom on focus */
+    line-height: 1.85;
+    color: var(--text);
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  @media (min-width: 1024px) {
+    .body, .entry p { font-size: 17px; }
+  }
+
+  /* Writing area: no boxes, just text on the page */
+  .composer { margin: 0 0 140px; }
+
+  /* Date: shows "2026.11.11 수"; a transparent native date input sits on top
+     so tapping it opens the phone's / browser's date picker. */
+  .date {
+    position: relative;
+    width: fit-content;
+    padding: 4px 0;
+    cursor: pointer;
+  }
+
+  .date input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    font-size: 16px;                    /* prevents iOS zoom */
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .date input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+  }
+
+  .body {
+    display: block;
+    width: 100%;
+    min-height: 5.55em;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .body::placeholder { color: #9a9a9a; opacity: 1; }
+
+  .actions {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+  }
+
+  .link {
+    font: inherit;
+    font-family: var(--font);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    padding: 8px 0;                     /* comfortable tap target */
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .link:hover { text-decoration: underline; }
+  .link:focus-visible, .date:focus-within {
+    outline: var(--stroke) solid var(--ink);
+    outline-offset: 4px;
+  }
+
+  .link--strong { font-weight: 700; }
+
+  [hidden] { display: none !important; }
+
+  /* Saved entries */
+  .entries { list-style: none; margin: 0; padding: 0; }
+  .entry { margin: 0 0 120px; }
+  .entry p { margin: 0; white-space: pre-wrap; }
+  .entry .actions { margin-top: 8px; }
+
+  .footer { margin-top: 40px; }
+
+  .note {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #888;
+    word-break: keep-all;
+  }
+
+  .file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+  <div class="stage" aria-hidden="true">
+    <svg class="gear gear--large"  data-gear="large"><g class="rotor"></g></svg>
+    <svg class="gear gear--medium" data-gear="medium"><g class="rotor"></g></svg>
+    <svg class="gear gear--small"  data-gear="small"><g class="rotor"></g></svg>
+  </div>
+
+  <main>
+    <div class="diary">
+
+      <header class="masthead">
+        <h1>DIARY</h1>
+        <span class="count" id="count"></span>
+      </header>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <label class="date">
+          <span id="date-label"></span>
+          <input type="date" id="date" aria-label="날짜 바꾸기" required>
+        </label>
+        <textarea class="body" id="text" rows="3"
+                  placeholder="여기를 눌러 오늘의 일기를 쓰세요." aria-label="일기 내용"></textarea>
+        <div class="actions">
+          <button type="submit" class="link link--strong" id="save">저장</button>
+          <button type="button" class="link" id="cancel" hidden>취소</button>
+        </div>
+      </form>
+
+      <ol class="entries" id="entries"></ol>
+
+      <footer class="footer">
+        <div class="actions">
+          <button type="button" class="link" id="export">백업 내보내기</button>
+          <button type="button" class="link" id="import-btn">백업 불러오기</button>
+          <input class="file-input" type="file" id="import" accept="application/json,.json" tabindex="-1">
+        </div>
+        <p class="note">일기는 지금 이 브라우저에만 저장되고, 다른 사람에게는 보이지 않아요. 다른 기기나 시크릿 모드에서는 보이지 않으니 가끔 백업을 내보내 두세요.</p>
+      </footer>
+
+    </div>
+  </main>
+
+<script>
+/* ==================================================================
+   GEARS — rotation driven purely by scroll position
+   ================================================================== */
+(function () {
+  'use strict';
+
+  var MODULE = 2;                   // tooth size shared by all gears (in u)
+  var DEG_PER_PX = 0.045;           // large-gear rotation per scrolled pixel
+
+  var GEARS = {
+    large:  { teeth: 58, hole: 9 },  // Ø 120u
+    medium: { teeth: 28, hole: 5 },  // Ø 60u
+    small:  { teeth: 11, hole: 3 }   // Ø 26u
+  };
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var root = document.documentElement;
+
+  // Straight-flank teeth with arc tips and roots, centred on (0,0).
+  function gearPath(teeth, m) {
+    var rp = m * teeth / 2;                 // pitch radius
+    var ra = rp + m;                        // tip radius
+    var rr = rp - 1.4 * m;                  // root radius
+    var p  = 2 * Math.PI / teeth;           // pitch angle
+    var tan20 = Math.tan(20 * Math.PI / 180);
+
+    var s  = 0.40 * Math.PI * m;                    // tooth thickness at pitch
+    var wt = (s - 2 * m * tan20) / 2 / ra;          // half-angle at tip
+    var wr = (s + 2 * 1.4 * m * tan20) / 2 / rr;    // half-angle at root
+
+    function pt(r, a) {
+      return (r * Math.cos(a)).toFixed(4) + ' ' + (r * Math.sin(a)).toFixed(4);
+    }
+    function arc(r, a) {
+      return 'A ' + r.toFixed(4) + ' ' + r.toFixed(4) + ' 0 0 1 ' + pt(r, a);
+    }
+
+    var d = 'M ' + pt(rr, -p / 2);
+    for (var k = 0; k < teeth; k++) {
+      var c = k * p;
+      d += ' ' + arc(rr, c - wr);
+      d += ' L ' + pt(ra, c - wt);
+      d += ' ' + arc(ra, c + wt);
+      d += ' L ' + pt(rr, c + wr);
+      d += ' ' + arc(rr, c + p / 2);
+    }
+    return d + ' Z';
+  }
+
+  function buildGear(name) {
+    var g = GEARS[name];
+    var svg = document.querySelector('[data-gear="' + name + '"]');
+    var rotor = svg.querySelector('.rotor');
+    var size = MODULE * (g.teeth + 2);
+    var r = size / 2;
+
+    svg.setAttribute('viewBox', [-r, -r, size, size].join(' '));
+    svg.style.setProperty('--size', size);
+
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', gearPath(g.teeth, MODULE));
+    var hole = document.createElementNS(SVG_NS, 'circle');
+    hole.setAttribute('cx', 0);
+    hole.setAttribute('cy', 0);
+    hole.setAttribute('r', g.hole);
+    rotor.appendChild(path);
+    rotor.appendChild(hole);
+
+    g.rotor = rotor;
+    g.pitchAngle = 360 / g.teeth;
+    g.pitchRadius = MODULE * g.teeth / 2;
+  }
+
+  var L = GEARS.large, M = GEARS.medium, S = GEARS.small;
+  var phaseM = 0, phaseS = 0;
+
+  function cssDeg(name) {
+    return parseFloat(getComputedStyle(root).getPropertyValue(name)) || 0;
+  }
+
+  // Phase for driven gear B meshing with driver A along direction a (deg).
+  function meshPhase(A, B, a) {
+    return a + 180 - B.pitchAngle * (0.5 - a / A.pitchAngle);
+  }
+
+  function layout() {
+    var a1 = cssDeg('--a1');
+    var a2 = cssDeg('--a2');
+    var d1 = L.pitchRadius + M.pitchRadius;
+    var d2 = M.pitchRadius + S.pitchRadius;
+    var rad = Math.PI / 180;
+
+    root.style.setProperty('--m-dx', (d1 * Math.cos(a1 * rad)).toFixed(4));
+    root.style.setProperty('--m-dy', (d1 * Math.sin(a1 * rad)).toFixed(4));
+    root.style.setProperty('--s-dx', (d2 * Math.cos(a2 * rad)).toFixed(4));
+    root.style.setProperty('--s-dy', (d2 * Math.sin(a2 * rad)).toFixed(4));
+
+    phaseM = meshPhase(L, M, a1);
+    phaseS = meshPhase(M, S, a2);
+    render();
+  }
+
+  // Large: clockwise. Medium: counter-clockwise. Small: clockwise.
+  function render() {
+    var y = Math.max(0, window.pageYOffset || root.scrollTop || 0);
+    var thL = y * DEG_PER_PX;
+    var thM = -thL * (L.teeth / M.teeth) + phaseM;
+    var thS = -thM * (M.teeth / S.teeth) + phaseS;
+
+    L.rotor.style.transform = 'rotate(' + thL.toFixed(3) + 'deg)';
+    M.rotor.style.transform = 'rotate(' + thM.toFixed(3) + 'deg)';
+    S.rotor.style.transform = 'rotate(' + thS.toFixed(3) + 'deg)';
+  }
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      render();
+    });
+  }
+
+  // Re-layout only when width/orientation changes (not on toolbar or keyboard).
+  function layoutKey() {
+    return window.innerWidth + (window.innerWidth > window.innerHeight ? 'l' : 'p');
+  }
+  var lastKey = '';
+  function onResize() {
+    var key = layoutKey();
+    if (key === lastKey) return;
+    lastKey = key;
+    requestAnimationFrame(layout);
+  }
+
+  buildGear('large');
+  buildGear('medium');
+  buildGear('small');
+  lastKey = layoutKey();
+  layout();
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', function () { lastKey = ''; onResize(); });
+  window.addEventListener('pageshow', render);
+})();
+
+/* ==================================================================
+   DIARY — each visitor's entries are saved in their own browser
+   (localStorage). Nothing is sent anywhere.
+   ================================================================== */
+(function () {
+  'use strict';
+
+  var KEY = 'gear-diary-entries-v1';
+  var DRAFT_KEY = 'gear-diary-draft-v1';
+  var DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+  var form = document.getElementById('composer');
+  var dateInput = document.getElementById('date');
+  var dateLabel = document.getElementById('date-label');
+  var textInput = document.getElementById('text');
+  var saveBtn = document.getElementById('save');
+  var cancelBtn = document.getElementById('cancel');
+  var list = document.getElementById('entries');
+  var countEl = document.getElementById('count');
+  var importInput = document.getElementById('import');
+
+  var entries = load();
+  var editingId = null;
+
+  // Ask the browser to keep this site's data (helps on Safari / Chrome).
+  try {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+  } catch (e) {}
+
+  /* ---------- storage ---------- */
+
+  function load() {
+    try {
+      var data = JSON.parse(localStorage.getItem(KEY) || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch (e) { return []; }
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(entries));
+      return true;
+    } catch (e) {
+      alert('저장하지 못했어요. 시크릿 모드이거나 브라우저 저장 공간이 막혀 있는지 확인해 주세요.');
+      return false;
+    }
+  }
+
+  function getDraft() {
+    try { return localStorage.getItem(DRAFT_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function setDraft(v) {
+    try {
+      if (v) localStorage.setItem(DRAFT_KEY, v);
+      else localStorage.removeItem(DRAFT_KEY);
+    } catch (e) {}
+  }
+
+  /* ---------- helpers ---------- */
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function formatDate(iso) {
+    var p = iso.split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return p[0] + '.' + p[1] + '.' + p[2] + ' ' + DAYS[d.getDay()];
+  }
+
+  function newId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function sorted() {
+    return entries.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return b.created - a.created;
+    });
+  }
+
+  // Grow the writing area with its content, so it reads like plain text.
+  function autosize() {
+    textInput.style.height = 'auto';
+    textInput.style.height = textInput.scrollHeight + 'px';
+  }
+
+  /* ---------- rendering ---------- */
+
+  function render() {
+    list.textContent = '';
+    sorted().forEach(function (entry) {
+      var li = document.createElement('li');
+      li.className = 'entry';
+
+      var time = document.createElement('time');
+      time.dateTime = entry.date;
+      time.textContent = formatDate(entry.date);
+
+      var p = document.createElement('p');
+      p.textContent = entry.text;
+
+      var actions = document.createElement('div');
+      actions.className = 'actions';
+      actions.appendChild(linkButton('수정', function () { startEdit(entry.id); }));
+      actions.appendChild(linkButton('삭제', function () { remove(entry.id); }));
+
+      li.appendChild(time);
+      li.appendChild(p);
+      li.appendChild(actions);
+      list.appendChild(li);
+    });
+    countEl.textContent = entries.length ? entries.length + '편' : '';
+  }
+
+  function linkButton(label, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'link';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  /* ---------- actions ---------- */
+
+  function setDate(iso) {
+    dateInput.value = iso;
+    dateLabel.textContent = formatDate(iso);
+  }
+
+  dateInput.addEventListener('change', function () {
+    setDate(dateInput.value || today());
+  });
+
+  // Open the picker on click where supported (desktop Chrome, Safari 16+)
+  dateInput.addEventListener('click', function () {
+    try { if (dateInput.showPicker) dateInput.showPicker(); } catch (e) {}
+  });
+
+  function resetComposer(text) {
+    editingId = null;
+    setDate(today());
+    textInput.value = text || '';
+    saveBtn.textContent = '저장';
+    cancelBtn.hidden = true;
+    autosize();
+  }
+
+  function startEdit(id) {
+    var entry = entries.find(function (e) { return e.id === id; });
+    if (!entry) return;
+    editingId = id;
+    setDate(entry.date);
+    textInput.value = entry.text;
+    saveBtn.textContent = '수정 완료';
+    cancelBtn.hidden = false;
+    autosize();
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    textInput.focus({ preventScroll: true });
+  }
+
+  function remove(id) {
+    if (!confirm('이 일기를 삭제할까요?')) return;
+    entries = entries.filter(function (e) { return e.id !== id; });
+    if (persist()) {
+      if (editingId === id) resetComposer(getDraft());
+      render();
+    }
+  }
+
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var text = textInput.value.replace(/\s+$/, '');
+    if (!text.trim()) { textInput.focus(); return; }
+    var date = dateInput.value || today();
+    var now = Date.now();
+    var wasEditing = !!editingId;
+
+    if (wasEditing) {
+      entries = entries.map(function (e) {
+        return e.id === editingId
+          ? { id: e.id, date: date, text: text, created: e.created, updated: now }
+          : e;
+      });
+    } else {
+      entries.push({ id: newId(), date: date, text: text, created: now, updated: now });
+    }
+
+    if (persist()) {
+      if (!wasEditing) setDraft('');
+      resetComposer(wasEditing ? getDraft() : '');
+      render();
+      textInput.blur();
+    }
+  });
+
+  cancelBtn.addEventListener('click', function () { resetComposer(getDraft()); });
+
+  textInput.addEventListener('input', function () {
+    autosize();
+    if (!editingId) setDraft(textInput.value);   // keeps unsaved writing
+  });
+
+  // Cmd/Ctrl + Enter saves
+  textInput.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+      ev.preventDefault();
+      if (form.requestSubmit) form.requestSubmit(); else saveBtn.click();
+    }
+  });
+
+  /* ---------- backup ---------- */
+
+  document.getElementById('export').addEventListener('click', function () {
+    if (!entries.length) { alert('아직 내보낼 일기가 없어요.'); return; }
+    var blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'diary-backup-' + today() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+
+  document.getElementById('import-btn').addEventListener('click', function () {
+    importInput.click();
+  });
+
+  importInput.addEventListener('change', function () {
+    var file = importInput.files && importInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (!Array.isArray(data)) throw new Error('bad');
+        var byId = {};
+        entries.forEach(function (e) { byId[e.id] = e; });
+        var added = 0;
+        data.forEach(function (e) {
+          if (!e || typeof e.text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return;
+          var id = e.id || newId();
+          if (!byId[id]) added++;
+          byId[id] = { id: id, date: e.date, text: e.text,
+                       created: +e.created || Date.now(), updated: +e.updated || Date.now() };
+        });
+        entries = Object.keys(byId).map(function (k) { return byId[k]; });
+        if (persist()) { render(); alert('백업을 불러왔어요. 새 일기 ' + added + '편'); }
+      } catch (e) {
+        alert('백업 파일을 읽지 못했어요.');
+      }
+      importInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  /* ---------- init ---------- */
+
+  resetComposer(getDraft());
+  render();
+  window.addEventListener('load', autosize);   // re-measure once the web font loads
+})();
+</script>
+</body>
+</html>
